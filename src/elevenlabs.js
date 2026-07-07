@@ -50,12 +50,15 @@ function connect(agentId, apiKey) {
     let settled = false;
 
     ws.once('open', () => {
-      // Request text-only mode (no TTS audio).
+      // Request text-only mode (no TTS audio) and suppress the first message for Slack.
       ws.send(
         JSON.stringify({
           type: 'conversation_initiation_client_data',
           conversation_config_override: {
-            agent: { tts: { enabled: false } },
+            agent: { 
+              tts: { enabled: false },
+              first_message: ""
+            },
           },
         }),
       );
