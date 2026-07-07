@@ -111,7 +111,8 @@ app.post('/slack/events', async (req, res) => {
   /* --- Filter --- */
   if (!shouldHandle(event, { botUserId, channelIds })) return;
 
-  const threadTs = event.thread_ts || event.ts;
+  // Use the channel ID as the conversation key so Linda remembers the whole room's context
+  const conversationKey = event.channel;
 
   try {
     // 👀 thinking indicator
@@ -122,7 +123,7 @@ app.post('/slack/events', async (req, res) => {
     const prompt = `${speaker}: ${event.text}`;
 
     // Send to Linda and wait for reply
-    const reply = await sendToLinda(threadTs, prompt, {
+    const reply = await sendToLinda(conversationKey, prompt, {
       agentId: ELEVENLABS_AGENT_ID,
       apiKey: ELEVENLABS_API_KEY,
       silenceToken: SILENCE_TOKEN,
@@ -134,8 +135,10 @@ app.post('/slack/events', async (req, res) => {
     ).catch(() => {});
 
     // Post reply (unless Linda chose silence)
+    // If the user's message was in a thread, reply in that thread.
+    // If it was a normal channel message, post a normal channel message.
     if (reply !== SILENCE_TOKEN) {
-      await postMessage(SLACK_BOT_TOKEN, event.channel, reply, threadTs);
+      await postMessage(SLACK_BOT_TOKEN, event.channel, reply, event.thread_ts);
     }
   } catch (err) {
     console.error('Error handling message:', err);

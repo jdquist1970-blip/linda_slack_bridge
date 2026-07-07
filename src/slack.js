@@ -47,9 +47,11 @@ async function api(method, token, body) {
   return res.json();
 }
 
-/** Post a message (always in-thread). */
+/** Post a message. Only uses a thread if threadTs is provided. */
 export async function postMessage(token, channel, text, threadTs) {
-  return api('chat.postMessage', token, { channel, text, thread_ts: threadTs });
+  const payload = { channel, text };
+  if (threadTs) payload.thread_ts = threadTs;
+  return api('chat.postMessage', token, payload);
 }
 
 /** Add an emoji reaction to a message. */
