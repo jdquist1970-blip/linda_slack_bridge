@@ -57,7 +57,7 @@ function connect(agentId, apiKey) {
           conversation_config_override: {
             agent: { 
               tts: { enabled: false },
-              first_message: ""
+              first_message: " "
             },
           },
         }),
