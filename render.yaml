@@ -1,0 +1,26 @@
+# One-service deploy config for Render (https://render.com).
+# In Render: New > Blueprint > point at this repo. Then set the secret env vars
+# (marked sync:false) in the dashboard — they are never stored in this file.
+services:
+  - type: web
+    name: linda-slack-bridge
+    runtime: node
+    plan: starter
+    buildCommand: npm install --omit=dev
+    startCommand: node src/server.js
+    healthCheckPath: /
+    envVars:
+      - key: SLACK_SIGNING_SECRET
+        sync: false
+      - key: SLACK_BOT_TOKEN
+        sync: false
+      - key: ELEVENLABS_API_KEY
+        sync: false
+      - key: ELEVENLABS_AGENT_ID
+        sync: false
+      - key: DTC_CHANNEL_IDS
+        sync: false
+      - key: SILENCE_TOKEN
+        value: "[[SKIP]]"
+      - key: THINKING_EMOJI
+        value: eyes
