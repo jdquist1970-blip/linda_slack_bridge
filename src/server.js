@@ -59,7 +59,7 @@ const app = express();
 app.use(express.raw({ type: '*/*' }));
 
 /** Health-check (Render uses this). */
-app.get('/', (_req, res) => res.send('ok'));
+app.get('/', (_req, res) => res.send('ok v2'));
 
 /** Cache the bot's own user id (lazy-loaded on first event). */
 let botUserId = null;
