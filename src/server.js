@@ -36,6 +36,47 @@ const channelIds = DTC_CHANNEL_IDS.split(',')
   .filter(Boolean);
 
 /* ------------------------------------------------------------------ */
+/*  Chat history (short-term memory per channel)                       */
+/*                                                                     */
+/*  ElevenLabs closes idle voice connections after a few minutes. We   */
+/*  keep the last messages per channel in memory and re-inject them    */
+/*  when the bridge reconnects, so Linda keeps her context.            */
+/*  Note: in-memory only — a redeploy or Render restart clears it.     */
+/* ------------------------------------------------------------------ */
+
+const LINDA_NAME = 'Aunt Linda';
+const HISTORY_MAX_MESSAGES = 20;
+const HISTORY_TTL_MS = 24 * 60 * 60_000;
+
+/** channel → { messages: string[], touched: number } */
+const chatHistory = new Map();
+
+function remember(channel, line) {
+  let h = chatHistory.get(channel);
+  if (!h) {
+    h = { messages: [], touched: 0 };
+    chatHistory.set(channel, h);
+  }
+  h.messages.push(line);
+  if (h.messages.length > HISTORY_MAX_MESSAGES) {
+    h.messages.splice(0, h.messages.length - HISTORY_MAX_MESSAGES);
+  }
+  h.touched = Date.now();
+}
+
+function recentHistory(channel) {
+  return chatHistory.get(channel)?.messages.slice() ?? [];
+}
+
+// Evict idle channels hourly so the Map can't grow forever.
+setInterval(() => {
+  const cutoff = Date.now() - HISTORY_TTL_MS;
+  for (const [channel, h] of chatHistory) {
+    if (h.touched < cutoff) chatHistory.delete(channel);
+  }
+}, 60 * 60_000).unref();
+
+/* ------------------------------------------------------------------ */
 /*  Event deduplication                                                */
 /* ------------------------------------------------------------------ */
 
@@ -122,11 +163,18 @@ app.post('/slack/events', async (req, res) => {
     const speaker = await displayName(SLACK_BOT_TOKEN, event.user);
     const prompt = `${speaker}: ${event.text}`;
 
+    // Snapshot history BEFORE recording the current message — the message is
+    // sent as the user turn itself; including it in the injected context
+    // block would duplicate it.
+    const history = recentHistory(conversationKey);
+    remember(conversationKey, prompt);
+
     // Send to Linda and wait for reply
     const reply = await sendToLinda(conversationKey, prompt, {
       agentId: ELEVENLABS_AGENT_ID,
       apiKey: ELEVENLABS_API_KEY,
       silenceToken: SILENCE_TOKEN,
+      history,
     });
 
     // Remove thinking indicator
@@ -138,6 +186,7 @@ app.post('/slack/events', async (req, res) => {
     // If the user's message was in a thread, reply in that thread.
     // If it was a normal channel message, post a normal channel message.
     if (reply !== SILENCE_TOKEN) {
+      remember(conversationKey, `${LINDA_NAME}: ${reply}`);
       await postMessage(SLACK_BOT_TOKEN, event.channel, reply, event.thread_ts);
     }
   } catch (err) {
