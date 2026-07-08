@@ -15,6 +15,7 @@ import {
 } from './slack.js';
 import { shouldHandle } from './filter.js';
 import { send as sendToLinda } from './elevenlabs.js';
+import { runQuote, summarizeQuote, emailQuote } from './quote.js';
 
 /* ------------------------------------------------------------------ */
 /*  Configuration (from environment)                                  */
@@ -28,6 +29,12 @@ const {
   DTC_CHANNEL_IDS = '',
   SILENCE_TOKEN = '[[SKIP]]',
   THINKING_EMOJI = 'eyes',
+  GOOGLE_MAPS_API_KEY = '',
+  QUOTE_API_URL = 'https://askauntlinda.com/api/swyfft-quote',
+  EMAIL_QUOTE_API_URL = 'https://askauntlinda.com/api/email-quote',
+  QUOTE_TOOL_SECRET = '',
+  QUOTE_LEAD_FIRST_NAME = 'Slack',
+  QUOTE_LEAD_LAST_NAME = 'Internal',
   PORT = '3000',
 } = process.env;
 
@@ -195,6 +202,87 @@ app.post('/slack/events', async (req, res) => {
     await removeReaction(
       SLACK_BOT_TOKEN, event.channel, event.ts, THINKING_EMOJI,
     ).catch(() => {});
+  }
+});
+
+/* ------------------------------------------------------------------ */
+/*  ElevenLabs webhook tools (Swyfft quoting)                         */
+/*                                                                     */
+/*  Called directly by ElevenLabs when Linda uses her quote tools.     */
+/*  Protected by a shared secret header (X-Tool-Secret).               */
+/* ------------------------------------------------------------------ */
+
+function toolAuthorized(req) {
+  return (
+    QUOTE_TOOL_SECRET !== '' &&
+    req.headers['x-tool-secret'] === QUOTE_TOOL_SECRET
+  );
+}
+
+function parseJsonBody(req) {
+  try {
+    return JSON.parse(req.body.toString());
+  } catch {
+    return {};
+  }
+}
+
+app.post('/tools/quote', async (req, res) => {
+  if (!toolAuthorized(req)) {
+    return res.status(401).json({ error: 'unauthorized' });
+  }
+  const body = parseJsonBody(req);
+  const address = String(body.address ?? '').trim();
+  if (!address) {
+    return res.json({
+      success: false,
+      error: 'An address is required to run a quote.',
+    });
+  }
+  if (!GOOGLE_MAPS_API_KEY) {
+    return res.json({
+      success: false,
+      error: 'The quote tool is not configured yet (missing geocoding key).',
+    });
+  }
+  try {
+    const raw = await runQuote(address, {
+      googleApiKey: GOOGLE_MAPS_API_KEY,
+      quoteUrl: QUOTE_API_URL,
+      firstName: String(body.firstName ?? '').trim() || QUOTE_LEAD_FIRST_NAME,
+      lastName: String(body.lastName ?? '').trim() || QUOTE_LEAD_LAST_NAME,
+    });
+    res.json(summarizeQuote(raw, address));
+  } catch (err) {
+    console.error('Quote tool error:', err);
+    res.json({
+      success: false,
+      error:
+        'No quote came back for that address. Swyfft may not write coverage ' +
+        'there, or the address could not be verified.',
+    });
+  }
+});
+
+app.post('/tools/email-quote', async (req, res) => {
+  if (!toolAuthorized(req)) {
+    return res.status(401).json({ error: 'unauthorized' });
+  }
+  const body = parseJsonBody(req);
+  const quoteId = String(body.quoteId ?? '').trim();
+  const email = String(body.email ?? '').trim();
+  if (!quoteId || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.json({
+      success: false,
+      error: 'A quoteId and a valid email address are required.',
+    });
+  }
+  try {
+    await emailQuote(quoteId, email, { emailUrl: EMAIL_QUOTE_API_URL });
+    res.json({ success: true, message: `Quote emailed to ${email}.` });
+  } catch (err) {
+    console.error('Email-quote tool error:', err);
+    res.json({ success: false, error: String(err.message).slice(0, 200) });
   }
 });
 

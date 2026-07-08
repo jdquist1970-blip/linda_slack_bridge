@@ -24,3 +24,7 @@ services:
         value: "[[SKIP]]"
       - key: THINKING_EMOJI
         value: eyes
+      - key: GOOGLE_MAPS_API_KEY
+        sync: false
+      - key: QUOTE_TOOL_SECRET
+        sync: false

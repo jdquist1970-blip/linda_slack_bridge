@@ -1,3 +1,8 @@
 node_modules/
 .env
 *.log
+
+# local working files
+Screenshot*.png
+extracted/
+implementation_plan.md

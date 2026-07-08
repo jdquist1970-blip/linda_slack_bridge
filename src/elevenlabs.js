@@ -13,7 +13,7 @@ import WebSocket from 'ws';
 
 const API_BASE = 'https://api.elevenlabs.io/v1';
 const CONNECT_TIMEOUT_MS = 15_000;
-const RESPONSE_TIMEOUT_MS = 30_000;
+const RESPONSE_TIMEOUT_MS = 75_000;
 const CONTEXT_MAX_CHARS = 3_000;
 
 /** conversationKey → { ws, queue } */
