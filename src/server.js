@@ -14,6 +14,7 @@ import {
   displayName,
 } from './slack.js';
 import { shouldHandle } from './filter.js';
+import { sanitizeForSlack } from './sanitize.js';
 import { send as sendToLinda } from './elevenlabs.js';
 import { runQuote, summarizeQuote, emailQuote } from './quote.js';
 
@@ -193,8 +194,11 @@ app.post('/slack/events', async (req, res) => {
     // If the user's message was in a thread, reply in that thread.
     // If it was a normal channel message, post a normal channel message.
     if (reply !== SILENCE_TOKEN) {
-      remember(conversationKey, `${LINDA_NAME}: ${reply}`);
-      await postMessage(SLACK_BOT_TOKEN, event.channel, reply, event.thread_ts);
+      // Strip voice-only artifacts ([excited] tags, spelled-out numbers)
+      // before the reply hits Slack.
+      const clean = sanitizeForSlack(reply);
+      remember(conversationKey, `${LINDA_NAME}: ${clean}`);
+      await postMessage(SLACK_BOT_TOKEN, event.channel, clean, event.thread_ts);
     }
   } catch (err) {
     console.error('Error handling message:', err);
@@ -288,7 +292,7 @@ app.post('/tools/email-quote', async (req, res) => {
 
 /* ------------------------------------------------------------------ */
 /*  Start (skip when imported by tests)                               */
-/* ------------------------------------------------------------------ */
+/* ------------------------ */
 
 if (process.env.NODE_ENV !== 'test') {
   app.listen(Number(PORT), () =>
